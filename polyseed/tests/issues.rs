@@ -2,18 +2,18 @@ use polyseed::{Language, Polyseed, PolyseedError};
 use zeroize::Zeroizing;
 
 #[test]
-#[should_panic]
 fn bug_word_count_panics_on_overflow() {
   let seed = "raven tail swear infant grief assist regular lamp \
     duck valid someone little harsh puppy airport language extra";
-  let _ = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()));
+  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()));
+  assert_eq!(res, Err(PolyseedError::InvalidWordCount));
 }
 
 #[test]
 fn bug_word_count_accepts_too_few() {
   let seed = "raven tail swear";
   let res = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()));
-  assert!(res.is_err());
+  assert_eq!(res, Err(PolyseedError::InvalidWordCount));
 }
 
 #[test]

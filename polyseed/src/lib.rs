@@ -121,6 +121,9 @@ pub enum PolyseedError {
   /// Unsupported feature bits were set.
   #[cfg_attr(feature = "std", error("unsupported features"))]
   UnsupportedFeatures,
+  /// The seed had an invalid word count.
+  #[cfg_attr(feature = "std", error("invalid word count"))]
+  InvalidWordCount,
 }
 
 /// Language options for Polyseed.
@@ -309,12 +312,18 @@ impl Polyseed {
   /// Create a new `Polyseed` from a String.
   #[allow(clippy::needless_pass_by_value)]
   pub fn from_string(lang: Language, seed: Zeroizing<String>) -> Result<Polyseed, PolyseedError> {
+    // Collect words and validate count
+    let words: Vec<&str> = seed.split_whitespace().collect();
+    if words.len() != POLYSEED_LENGTH {
+      return Err(PolyseedError::InvalidWordCount);
+    }
+
     // Decode the seed into its polynomial coefficients
     let mut poly = [0; POLYSEED_LENGTH];
 
     // Validate words are in the lang word list
     let lang_word_list: &WordList = &LANGUAGES[&lang];
-    for (i, word) in seed.split_whitespace().enumerate() {
+    for (i, word) in words.into_iter().enumerate() {
       // Find the word's index
       fn check_if_matches<S: AsRef<str>, I: Iterator<Item = S>>(
         has_prefix: bool,
