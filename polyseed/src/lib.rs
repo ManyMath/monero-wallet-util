@@ -78,8 +78,6 @@ const DATA_WORDS: usize = POLYSEED_LENGTH - POLY_NUM_CHECK_DIGITS;
 const GF_BITS: usize = 11;
 const POLYSEED_MUL2_TABLE: [u16; 8] = [5, 7, 1, 3, 13, 15, 9, 11];
 
-type Poly = [u16; POLYSEED_LENGTH];
-
 fn elem_mul2(x: u16) -> u16 {
   if x < 1024 {
     return 2 * x;
@@ -87,7 +85,7 @@ fn elem_mul2(x: u16) -> u16 {
   POLYSEED_MUL2_TABLE[usize::from(x % 8)] + (16 * ((x - 1024) / 8))
 }
 
-fn poly_eval(poly: &Poly) -> u16 {
+fn poly_eval(poly: &[u16; POLYSEED_LENGTH]) -> u16 {
   // Horner's method at x = 2
   let mut result = poly[POLYSEED_LENGTH - 1];
   for i in (0 .. (POLYSEED_LENGTH - 1)).rev() {
@@ -216,7 +214,7 @@ fn valid_entropy(entropy: &Zeroizing<[u8; 32]>) -> bool {
 
 impl Polyseed {
   // TODO: Clean this
-  fn to_poly(&self) -> Poly {
+  fn to_poly(&self) -> Zeroizing<[u16; POLYSEED_LENGTH]> {
     let mut extra_bits = u32::from(FEATURE_BITS + DATE_BITS);
     let extra_val = (u16::from(self.features) << DATE_BITS) | self.birthday;
 
@@ -224,7 +222,7 @@ impl Polyseed {
     let mut secret_bits = BITS_PER_BYTE;
     let mut seed_rem_bits = SECRET_BITS - BITS_PER_BYTE;
 
-    let mut poly = [0; POLYSEED_LENGTH];
+    let mut poly = Zeroizing::new([0; POLYSEED_LENGTH]);
     for i in 0 .. DATA_WORDS {
       extra_bits -= 1;
 
@@ -273,7 +271,7 @@ impl Polyseed {
       entropy,
       checksum: 0,
     };
-    res.checksum = poly_eval(&res.to_poly());
+    res.checksum = poly_eval(&*res.to_poly());
     Ok(res)
   }
 
@@ -319,7 +317,7 @@ impl Polyseed {
     }
 
     // Decode the seed into its polynomial coefficients
-    let mut poly = [0; POLYSEED_LENGTH];
+    let mut poly = Zeroizing::new([0u16; POLYSEED_LENGTH]);
 
     // Validate words are in the lang word list
     let lang_word_list: &WordList = &LANGUAGES[&lang];
@@ -391,7 +389,7 @@ impl Polyseed {
     let mut entropy_bits = 0;
 
     let checksum = poly[0];
-    for mut word_val in poly.into_iter().skip(POLY_NUM_CHECK_DIGITS) {
+    for mut word_val in poly.iter().copied().skip(POLY_NUM_CHECK_DIGITS) {
       // Parse the bottom bit, which is one of the bits of extra
       // This iterates for less than 16 iters, meaning this won't drop any bits
       extra <<= 1;
