@@ -18,10 +18,19 @@ fn bug_word_count_accepts_too_few() {
 
 #[test]
 fn bug_accent_strip_uses_ascii_filter() {
+  use unicode_normalization::UnicodeNormalization;
+
   let ascii_seed = "eje fin parte celebre tabu pestana lienzo puma \
     prision hora regalo lengua existir lapiz lote sonoro";
   let res = Polyseed::from_string(Language::Spanish, Zeroizing::new(ascii_seed.into()));
   assert!(res.is_ok());
+
+  let nfc_seed: String = "eje fin parte celebre tabu pestana lienzo puma \
+    prision hora regalo lengua existir lapiz lote sonoro"
+    .nfc()
+    .collect();
+  let res_nfc = Polyseed::from_string(Language::Spanish, Zeroizing::new(nfc_seed));
+  assert!(res_nfc.is_ok());
 }
 
 #[test]

@@ -14,6 +14,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use sha2::Sha256;
 use pbkdf2::pbkdf2_hmac;
+use unicode_normalization::UnicodeNormalization;
 
 #[cfg(test)]
 mod tests;
@@ -310,8 +311,11 @@ impl Polyseed {
   /// Create a new `Polyseed` from a String.
   #[allow(clippy::needless_pass_by_value)]
   pub fn from_string(lang: Language, seed: Zeroizing<String>) -> Result<Polyseed, PolyseedError> {
+    // NFKD-normalize the input seed
+    let normalized: Zeroizing<String> = Zeroizing::new(seed.nfkd().collect());
+
     // Collect words and validate count
-    let words: Vec<&str> = seed.split_whitespace().collect();
+    let words: Vec<&str> = normalized.split_whitespace().collect();
     if words.len() != POLYSEED_LENGTH {
       return Err(PolyseedError::InvalidWordCount);
     }
@@ -356,11 +360,12 @@ impl Polyseed {
       }
 
       let Some(coeff) = (if lang_word_list.has_accent {
-        let ascii = |word: &str| word.chars().filter(char::is_ascii).collect::<String>();
+        let strip_accents =
+          |word: &str| -> String { word.nfkd().filter(|c| c.is_ascii()).collect() };
         check_if_matches(
           lang_word_list.has_prefix,
-          lang_word_list.words.iter().map(|lang_word| ascii(lang_word)),
-          &ascii(word),
+          lang_word_list.words.iter().map(|lang_word| strip_accents(lang_word)),
+          &strip_accents(word),
         )
       } else {
         check_if_matches(lang_word_list.has_prefix, lang_word_list.words.iter(), word)
