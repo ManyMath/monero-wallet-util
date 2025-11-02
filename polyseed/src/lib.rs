@@ -460,6 +460,11 @@ impl Polyseed {
     self.features
   }
 
+  /// Returns `true` if this seed is currently encrypted.
+  pub fn is_encrypted(&self) -> bool {
+    (self.features & ENCRYPTED_MASK) != 0
+  }
+
   /// This seed's entropy.
   pub fn entropy(&self) -> &Zeroizing<[u8; 32]> {
     &self.entropy

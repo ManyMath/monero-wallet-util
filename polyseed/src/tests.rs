@@ -232,3 +232,9 @@ fn test_key() {
     ]
   );
 }
+
+#[test]
+fn test_is_encrypted() {
+  let seed = Polyseed::new(&mut OsRng, Language::English);
+  assert!(!seed.is_encrypted(), "A newly created seed should not be encrypted");
+}

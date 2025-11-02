@@ -58,7 +58,7 @@ fn gap_no_is_encrypted() {
   let seed = "raven tail swear infant grief assist regular lamp \
     duck valid someone little harsh puppy airport language";
   let parsed = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()), Coin::Monero).unwrap();
-  let _features = parsed.features();
+  assert!(!parsed.is_encrypted());
 }
 
 #[test]
