@@ -27,8 +27,8 @@ fn test_polyseed() {
     },
     Vector {
       language: Language::Spanish,
-      seed: "eje fin parte célebre tabú pestaña lienzo puma \
-      prisión hora regalo lengua existir lápiz lote sonoro"
+      seed: "eje fin parte célebre tabú pestaña lienzo puma \
+      prisión hora regalo lengua existir lápiz lote sonoro"
         .into(),
       entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
       birthday: 3118651200,
@@ -37,8 +37,8 @@ fn test_polyseed() {
     },
     Vector {
       language: Language::French,
-      seed: "valable arracher décaler jeudi amusant dresser mener épaissir risible \
-      prouesse réserve ampleur ajuster muter caméra enchère"
+      seed: "valable arracher décaler jeudi amusant dresser mener épaissir risible \
+      prouesse réserve ampleur ajuster muter caméra enchère"
         .into(),
       entropy: "11cfd870324b26657342c37360c424a14a050b00000000000000000000000000".into(),
       birthday: 1679314966,
@@ -77,8 +77,8 @@ fn test_polyseed() {
     },
     Vector {
       language: Language::Korean,
-      seed: "전망 선풍기 국제 무궁화 설사 기름 이론적 해안 절망 예선 \
-        지우개 보관 절망 말기 시각 귀신"
+      seed: "전망 선풍기 국제 무궁화 설사 기름 이론적 해안 절망 예선 \
+        지우개 보관 절망 말기 시각 귀신"
         .into(),
       entropy: "684663fda420298f42ed94b2c512ed38ddf12b00000000000000000000000000".into(),
       birthday: 1679317073,
@@ -87,8 +87,8 @@ fn test_polyseed() {
     },
     Vector {
       language: Language::Japanese,
-      seed: "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
-      といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる"
+      seed: "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
+      といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる"
         .into(),
       entropy: "94e6665518a6286c6e3ba508a2279eb62b771f00000000000000000000000000".into(),
       birthday: 1679318722,
@@ -134,7 +134,7 @@ fn test_polyseed() {
     let seed_without_accents = |seed: &str| {
       seed
         .split_whitespace()
-        .map(|w| w.chars().filter(char::is_ascii).collect::<String>())
+        .map(|w| w.nfkd().filter(|c| c.is_ascii()).collect::<String>())
         .collect::<Vec<_>>()
         .join(" ")
     };
@@ -165,24 +165,24 @@ fn test_polyseed() {
 
     // String -> Seed
     println!("{}. language: {:?}, seed: {}", line!(), vector.language, vector.seed.clone());
-    let seed = Polyseed::from_string(vector.language, Zeroizing::new(vector.seed.clone())).unwrap();
+    let seed = Polyseed::from_string(vector.language, Zeroizing::new(vector.seed.clone()), Coin::Monero).unwrap();
     let trim = trim_seed(&vector.seed);
     let add_whitespace = add_whitespace(vector.seed.clone());
     let seed_without_accents = seed_without_accents(&vector.seed);
 
     // Make sure a version with added whitespace still works
     let whitespaced_seed =
-      Polyseed::from_string(vector.language, Zeroizing::new(add_whitespace)).unwrap();
+      Polyseed::from_string(vector.language, Zeroizing::new(add_whitespace), Coin::Monero).unwrap();
     assert_eq!(seed, whitespaced_seed);
     // Check trimmed versions works
     if vector.has_prefix {
-      let trimmed_seed = Polyseed::from_string(vector.language, Zeroizing::new(trim)).unwrap();
+      let trimmed_seed = Polyseed::from_string(vector.language, Zeroizing::new(trim), Coin::Monero).unwrap();
       assert_eq!(seed, trimmed_seed);
     }
     // Check versions without accents work
     if vector.has_accent {
       let seed_without_accents =
-        Polyseed::from_string(vector.language, Zeroizing::new(seed_without_accents)).unwrap();
+        Polyseed::from_string(vector.language, Zeroizing::new(seed_without_accents), Coin::Monero).unwrap();
       assert_eq!(seed, seed_without_accents);
     }
 
@@ -192,13 +192,13 @@ fn test_polyseed() {
 
     // Entropy -> Seed
     let from_entropy = Polyseed::from(vector.language, 0, seed.birthday(), entropy).unwrap();
-    assert_eq!(seed.to_string(), from_entropy.to_string());
+    assert_eq!(seed.to_string(Coin::Monero), from_entropy.to_string(Coin::Monero));
 
     // Check against ourselves
     {
       let seed = Polyseed::new(&mut OsRng, vector.language);
-      println!("{}. seed: {}", line!(), *seed.to_string());
-      assert_eq!(seed, Polyseed::from_string(vector.language, seed.to_string()).unwrap());
+      println!("{}. seed: {}", line!(), *seed.to_string(Coin::Monero));
+      assert_eq!(seed, Polyseed::from_string(vector.language, seed.to_string(Coin::Monero), Coin::Monero).unwrap());
       assert_eq!(
         seed,
         Polyseed::from(vector.language, 0, seed.birthday(), seed.entropy().clone(),).unwrap()
@@ -213,14 +213,22 @@ fn test_invalid_polyseed() {
   let seed = "include domain claim resemble urban hire lunch bird \
     crucial fire best wife ring warm ignore model"
     .into();
-  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed));
+  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed), Coin::Monero);
   assert_eq!(res, Err(PolyseedError::UnsupportedFeatures));
 }
 
 #[test]
 fn test_key() {
-  let seed: String = "comic blanket chair inject end snow rural improve cereal better initial replace ribbon brother gather unaware".into();
-  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed)).unwrap();
-  let key = res.key();
-  assert_eq!(*key, [216, 82, 37, 164, 252, 122, 170, 61, 52, 152, 131, 26, 181, 226, 191, 131, 204, 3, 242, 225, 229, 175, 37, 151, 18, 143, 53, 175, 136, 17, 47, 126]);
+  let seed: String = "comic blanket chair inject end snow rural improve cereal \
+     better initial replace ribbon brother gather unaware"
+    .into();
+  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed), Coin::Monero).unwrap();
+  let key = res.key(Coin::Monero);
+  assert_eq!(
+    *key,
+    [
+      216, 82, 37, 164, 252, 122, 170, 61, 52, 152, 131, 26, 181, 226, 191, 131, 204, 3, 242, 225,
+      229, 175, 37, 151, 18, 143, 53, 175, 136, 17, 47, 126
+    ]
+  );
 }

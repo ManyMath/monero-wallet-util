@@ -99,10 +99,26 @@ fn poly_eval(poly: &[u16; POLYSEED_LENGTH]) -> u16 {
 const POLYSEED_SALT: &[u8] = b"POLYSEED key";
 const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
 
-// Polyseed technically supports multiple coins, and the value for Monero is 0
-// See: https://github.com/tevador/polyseed/blob/dfb05d8edb682b0e8f743b1b70c9131712ff4157
-//   /include/polyseed.h#L57
-const COIN: u16 = 0;
+/// Coin types supported by Polyseed.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
+pub enum Coin {
+  /// Monero (coin index 0).
+  Monero,
+  /// Aeon (coin index 1).
+  Aeon,
+  /// Wownero (coin index 2).
+  Wownero,
+}
+
+impl Coin {
+  fn to_raw(self) -> u16 {
+    match self {
+      Coin::Monero => 0,
+      Coin::Aeon => 1,
+      Coin::Wownero => 2,
+    }
+  }
+}
 
 /// An error when working with a Polyseed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -310,7 +326,7 @@ impl Polyseed {
 
   /// Create a new `Polyseed` from a String.
   #[allow(clippy::needless_pass_by_value)]
-  pub fn from_string(lang: Language, seed: Zeroizing<String>) -> Result<Polyseed, PolyseedError> {
+  pub fn from_string(lang: Language, seed: Zeroizing<String>, coin: Coin) -> Result<Polyseed, PolyseedError> {
     // NFKD-normalize the input seed
     let normalized: Zeroizing<String> = Zeroizing::new(seed.nfkd().collect());
 
@@ -378,7 +394,7 @@ impl Polyseed {
     }
 
     // xor out the coin
-    poly[POLY_NUM_CHECK_DIGITS] ^= COIN;
+    poly[POLY_NUM_CHECK_DIGITS] ^= coin.to_raw();
 
     // Validate the checksum
     if poly_eval(&poly) != 0 {
@@ -450,32 +466,28 @@ impl Polyseed {
   }
 
   /// The key derived from this seed.
-  pub fn key(&self) -> Zeroizing<[u8; 32]> {
+  pub fn key(&self, coin: Coin) -> Zeroizing<[u8; 32]> {
     let mut key = Zeroizing::new([0u8; 32]);
     let mut salt = [0u8; 32];
-    salt[..12].copy_from_slice(POLYSEED_SALT);
+    salt[.. 12].copy_from_slice(POLYSEED_SALT);
     salt[13] = 0xFF;
     salt[14] = 0xFF;
     salt[15] = 0xFF;
-    salt[20] = self.birthday.try_into().unwrap();
-    salt[24] = self.features;
-    pbkdf2_hmac::<Sha256>(
-      self.entropy.as_slice(),
-      &salt,
-      POLYSEED_KEYGEN_ITERATIONS,
-      key.as_mut(),
-    );
+    salt[16 .. 20].copy_from_slice(&u32::from(coin.to_raw()).to_le_bytes());
+    salt[20 .. 24].copy_from_slice(&u32::from(self.birthday).to_le_bytes());
+    salt[24 .. 28].copy_from_slice(&u32::from(self.features).to_le_bytes());
+    pbkdf2_hmac::<Sha256>(self.entropy.as_slice(), &salt, POLYSEED_KEYGEN_ITERATIONS, key.as_mut());
     key
   }
 
   /// The String representation of this seed.
-  pub fn to_string(&self) -> Zeroizing<String> {
+  pub fn to_string(&self, coin: Coin) -> Zeroizing<String> {
     // Encode the polynomial with the existing checksum
     let mut poly = self.to_poly();
     poly[0] = self.checksum;
 
     // Embed the coin
-    poly[POLY_NUM_CHECK_DIGITS] ^= COIN;
+    poly[POLY_NUM_CHECK_DIGITS] ^= coin.to_raw();
 
     // Output words
     let mut seed = Zeroizing::new(String::new());
