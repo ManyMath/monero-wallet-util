@@ -100,6 +100,13 @@ const POLYSEED_SALT: &[u8] = b"POLYSEED key";
 const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
 const POLYSEED_CRYPT_ITERATIONS: u32 = 10000;
 
+// Binary storage parameters
+const STORAGE_HEADER: &[u8; 8] = b"POLYSEED";
+const STORAGE_EXTRA_BYTE: u8 = 0xFF;
+const STORAGE_FOOTER: u16 = 0x7000;
+const GF_MASK: u16 = (1u16 << GF_BITS) - 1;
+const FEATURE_MASK: u8 = (1u8 << FEATURE_BITS) - 1;
+
 /// Coin types supported by Polyseed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 pub enum Coin {
@@ -140,6 +147,9 @@ pub enum PolyseedError {
   /// The seed had an invalid word count.
   #[cfg_attr(feature = "std", error("invalid word count"))]
   InvalidWordCount,
+  /// The binary storage format is invalid.
+  #[cfg_attr(feature = "std", error("invalid format"))]
+  InvalidFormat,
 }
 
 /// Language options for Polyseed.
@@ -541,5 +551,96 @@ impl Polyseed {
     }
 
     seed
+  }
+
+  /// Serialize this seed to a 32-byte binary format.
+  ///
+  /// The format matches the C reference `polyseed_store`:
+  /// ```text
+  /// [0..8]:   b"POLYSEED" header
+  /// [8..10]:  (features << 10) | birthday  as LE u16
+  /// [10..29]: secret (19 bytes)
+  /// [29]:     0xFF
+  /// [30..32]: (0x7000 | checksum) as LE u16
+  /// ```
+  pub fn store(&self) -> Zeroizing<[u8; 32]> {
+    let mut storage = Zeroizing::new([0u8; 32]);
+    storage[.. 8].copy_from_slice(STORAGE_HEADER);
+    let v1 = (u16::from(self.features) << DATE_BITS) | self.birthday;
+    storage[8 .. 10].copy_from_slice(&v1.to_le_bytes());
+    storage[10 .. 10 + SECRET_SIZE].copy_from_slice(&self.entropy[.. SECRET_SIZE]);
+    storage[29] = STORAGE_EXTRA_BYTE;
+    let v2 = STORAGE_FOOTER | self.checksum;
+    storage[30 .. 32].copy_from_slice(&v2.to_le_bytes());
+    storage
+  }
+
+  /// Deserialize a seed from a 32-byte binary format.
+  ///
+  /// The `language` parameter is stored alongside the seed since the binary
+  /// format does not encode which language the seed was created with.
+  ///
+  /// Unlike `from_string`, this method accepts encrypted seeds (matching the
+  /// C reference `polyseed_load` behavior). Use `is_encrypted()` and `crypt()`
+  /// to decrypt if needed.
+  pub fn load(storage: &[u8; 32], language: Language) -> Result<Polyseed, PolyseedError> {
+    // Validate header
+    if storage[.. 8] != *STORAGE_HEADER {
+      return Err(PolyseedError::InvalidFormat);
+    }
+
+    // Parse features and birthday
+    let v1 = u16::from_le_bytes([storage[8], storage[9]]);
+    let birthday = v1 & DATE_MASK;
+    let features_raw = v1 >> DATE_BITS;
+    if features_raw > u16::from(FEATURE_MASK) {
+      return Err(PolyseedError::InvalidFormat);
+    }
+    let features = features_raw as u8;
+
+    // Parse entropy
+    let mut entropy = Zeroizing::new([0u8; 32]);
+    entropy[.. SECRET_SIZE].copy_from_slice(&storage[10 .. 10 + SECRET_SIZE]);
+
+    // Validate entropy bits
+    if entropy[SECRET_SIZE - 1] & !LAST_BYTE_SECRET_BITS_MASK != 0 {
+      return Err(PolyseedError::InvalidFormat);
+    }
+
+    // Validate extra byte
+    if storage[29] != STORAGE_EXTRA_BYTE {
+      return Err(PolyseedError::InvalidFormat);
+    }
+
+    // Parse and validate footer + checksum
+    let v2 = u16::from_le_bytes([storage[30], storage[31]]);
+    let stored_checksum = v2 & GF_MASK;
+    let footer = v2 & !GF_MASK;
+    if footer != STORAGE_FOOTER {
+      return Err(PolyseedError::InvalidFormat);
+    }
+
+    // Check supported features (but allow encrypted seeds through)
+    if !polyseed_features_supported(features) {
+      return Err(PolyseedError::UnsupportedFeatures);
+    }
+
+    // Construct the seed directly
+    let seed = Polyseed {
+      language,
+      birthday,
+      features,
+      entropy,
+      checksum: stored_checksum,
+    };
+
+    // Verify checksum by computing poly_eval on the polynomial
+    let mut poly = seed.to_poly();
+    poly[0] = stored_checksum;
+    if poly_eval(&poly) != 0 {
+      return Err(PolyseedError::InvalidChecksum);
+    }
+
+    Ok(seed)
   }
 }

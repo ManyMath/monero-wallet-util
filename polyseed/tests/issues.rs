@@ -77,7 +77,10 @@ fn gap_no_crypt() {
 fn gap_no_store_load() {
   let seed = "raven tail swear infant grief assist regular lamp \
     duck valid someone little harsh puppy airport language";
-  let _parsed = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()), Coin::Monero).unwrap();
+  let parsed = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()), Coin::Monero).unwrap();
+  let storage = parsed.store();
+  let loaded = Polyseed::load(&storage, Language::English).unwrap();
+  assert_eq!(parsed, loaded);
 }
 
 #[test]

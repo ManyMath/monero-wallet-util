@@ -280,3 +280,62 @@ fn test_crypt_salt_and_mask_vector() {
     "886777de23641e21a0fd252d37a9d06b2d87fd1f3c8c001624e909b31f2c9be5"
   );
 }
+
+#[test]
+fn test_store_load_roundtrip() {
+  let seed_str = "raven tail swear infant grief assist regular lamp \
+      duck valid someone little harsh puppy airport language";
+  let seed = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+
+  let storage = seed.store();
+  assert_eq!(&storage[.. 8], b"POLYSEED");
+  assert_eq!(storage[29], 0xFF);
+
+  let loaded = Polyseed::load(&storage, Language::English).unwrap();
+  assert_eq!(seed, loaded);
+  assert_eq!(*seed.entropy(), *loaded.entropy());
+  assert_eq!(seed.birthday(), loaded.birthday());
+  assert_eq!(seed.features(), loaded.features());
+
+  let random_seed = Polyseed::new(&mut OsRng, Language::Japanese);
+  let storage2 = random_seed.store();
+  let loaded2 = Polyseed::load(&storage2, Language::Japanese).unwrap();
+  assert_eq!(random_seed, loaded2);
+}
+
+#[test]
+fn test_load_invalid_format() {
+  let mut storage = [0u8; 32];
+  storage[.. 8].copy_from_slice(b"BADHEADR");
+  assert_eq!(Polyseed::load(&storage, Language::English), Err(PolyseedError::InvalidFormat));
+
+  let seed = Polyseed::new(&mut OsRng, Language::English);
+  let mut storage = *seed.store();
+  storage[29] = 0x00;
+  assert_eq!(Polyseed::load(&storage, Language::English), Err(PolyseedError::InvalidFormat));
+
+  let mut storage = *seed.store();
+  storage[30] = 0x00;
+  storage[31] = 0x00;
+  assert_eq!(Polyseed::load(&storage, Language::English), Err(PolyseedError::InvalidFormat));
+}
+
+#[test]
+fn test_crypt_store_load_roundtrip() {
+  let seed_str = "raven tail swear infant grief assist regular lamp \
+      duck valid someone little harsh puppy airport language";
+  let original = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+
+  let mut encrypted = original.clone();
+  encrypted.crypt("my_password");
+  assert!(encrypted.is_encrypted());
+
+  let storage = encrypted.store();
+  let mut loaded = Polyseed::load(&storage, Language::English).unwrap();
+  assert!(loaded.is_encrypted());
+  assert_eq!(encrypted, loaded);
+
+  loaded.crypt("my_password");
+  assert!(!loaded.is_encrypted());
+  assert_eq!(original, loaded);
+}
