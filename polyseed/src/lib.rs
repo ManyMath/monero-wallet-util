@@ -98,6 +98,7 @@ fn poly_eval(poly: &[u16; POLYSEED_LENGTH]) -> u16 {
 // Key gen parameters
 const POLYSEED_SALT: &[u8] = b"POLYSEED key";
 const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
+const POLYSEED_CRYPT_ITERATIONS: u32 = 10000;
 
 /// Coin types supported by Polyseed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
@@ -463,6 +464,41 @@ impl Polyseed {
   /// Returns `true` if this seed is currently encrypted.
   pub fn is_encrypted(&self) -> bool {
     (self.features & ENCRYPTED_MASK) != 0
+  }
+
+  /// Encrypt or decrypt this seed with a password.
+  ///
+  /// This is a toggle operation: calling it once encrypts, calling it again
+  /// with the same password decrypts. Matches the C reference `polyseed_crypt`.
+  pub fn crypt(&mut self, password: &str) {
+    // NFKD-normalize the password
+    let normalized: Zeroizing<String> = Zeroizing::new(password.nfkd().collect());
+
+    // Derive encryption mask
+    let mut mask = Zeroizing::new([0u8; 32]);
+    let mut salt = [0u8; 16];
+    salt[.. 13].copy_from_slice(b"POLYSEED mask");
+    // salt[13] stays 0x00
+    salt[14] = 0xFF;
+    salt[15] = 0xFF;
+    pbkdf2_hmac::<Sha256>(
+      normalized.as_bytes(),
+      &salt,
+      POLYSEED_CRYPT_ITERATIONS,
+      mask.as_mut(),
+    );
+
+    // XOR the entropy with the mask
+    for i in 0 .. SECRET_SIZE {
+      self.entropy[i] ^= mask[i];
+    }
+    self.entropy[SECRET_SIZE - 1] &= LAST_BYTE_SECRET_BITS_MASK;
+
+    // Toggle the encrypted flag
+    self.features ^= ENCRYPTED_MASK;
+
+    // Recalculate checksum
+    self.checksum = poly_eval(&*self.to_poly());
   }
 
   /// This seed's entropy.

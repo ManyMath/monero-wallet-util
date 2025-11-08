@@ -238,3 +238,45 @@ fn test_is_encrypted() {
   let seed = Polyseed::new(&mut OsRng, Language::English);
   assert!(!seed.is_encrypted(), "A newly created seed should not be encrypted");
 }
+
+#[test]
+fn test_crypt_roundtrip() {
+  let seed_str = "raven tail swear infant grief assist regular lamp \
+      duck valid someone little harsh puppy airport language";
+  let original = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let original_entropy = original.entropy().clone();
+
+  // Encrypt
+  let mut encrypted = original.clone();
+  encrypted.crypt("password");
+  assert!(encrypted.is_encrypted(), "Seed should be encrypted after crypt");
+  assert_ne!(encrypted.entropy(), &original_entropy, "Encrypted entropy should differ");
+
+  // Decrypt
+  encrypted.crypt("password");
+  assert!(!encrypted.is_encrypted(), "Seed should be decrypted after second crypt");
+  assert_eq!(encrypted.entropy(), &original_entropy, "Decrypted entropy should match original");
+  assert_eq!(encrypted, original, "Decrypted seed should match original");
+}
+
+#[test]
+fn test_crypt_salt_and_mask_vector() {
+  use sha2::Sha256;
+  use pbkdf2::pbkdf2_hmac;
+
+  let password = "password";
+  let mut salt = [0u8; 16];
+  salt[.. 13].copy_from_slice(b"POLYSEED mask");
+  salt[14] = 0xFF;
+  salt[15] = 0xFF;
+
+  assert_eq!(hex::encode(&salt), "504f4c5953454544206d61736b00ffff");
+
+  let mut mask = [0u8; 32];
+  pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, 10000, &mut mask);
+
+  assert_eq!(
+    hex::encode(&mask),
+    "886777de23641e21a0fd252d37a9d06b2d87fd1f3c8c001624e909b31f2c9be5"
+  );
+}
