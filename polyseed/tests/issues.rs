@@ -87,7 +87,10 @@ fn gap_no_store_load() {
 fn gap_no_auto_detect() {
   let seed = "raven tail swear infant grief assist regular lamp \
     duck valid someone little harsh puppy airport language";
-  let _parsed = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()), Coin::Monero).unwrap();
+  let (parsed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed.into()), Coin::Monero).unwrap();
+  assert_eq!(lang, Language::English);
+  let expected = Polyseed::from_string(Language::English, Zeroizing::new(seed.into()), Coin::Monero).unwrap();
+  assert_eq!(parsed, expected);
 }
 
 #[test]

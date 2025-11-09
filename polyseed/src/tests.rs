@@ -339,3 +339,38 @@ fn test_crypt_store_load_roundtrip() {
   assert!(!loaded.is_encrypted());
   assert_eq!(original, loaded);
 }
+
+#[test]
+fn test_from_string_auto_english() {
+  let seed_str = "raven tail swear infant grief assist regular lamp \
+      duck valid someone little harsh puppy airport language";
+  let (seed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  assert_eq!(lang, Language::English);
+  let expected = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  assert_eq!(seed, expected);
+}
+
+#[test]
+fn test_from_string_auto_japanese() {
+  let seed_str = "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
+      といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる";
+  let (seed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  assert_eq!(lang, Language::Japanese);
+  let expected = Polyseed::from_string(Language::Japanese, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  assert_eq!(seed, expected);
+}
+
+#[test]
+fn test_from_string_auto_invalid() {
+  let garbage = Zeroizing::new("xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx".into());
+  let result = Polyseed::from_string_auto(garbage, Coin::Monero);
+  assert_eq!(result, Err(PolyseedError::InvalidSeed));
+}
+
+#[test]
+fn test_from_string_auto_wrong_word_count() {
+  let too_few = Zeroizing::new("raven tail swear".into());
+  let result = Polyseed::from_string_auto(too_few, Coin::Monero);
+  // All languages fail with InvalidWordCount, which means no match -> InvalidSeed
+  assert_eq!(result, Err(PolyseedError::InvalidSeed));
+}

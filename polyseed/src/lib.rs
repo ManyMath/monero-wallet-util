@@ -130,6 +130,7 @@ impl Coin {
 
 /// An error when working with a Polyseed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum PolyseedError {
   /// The seed was invalid.
@@ -150,6 +151,9 @@ pub enum PolyseedError {
   /// The binary storage format is invalid.
   #[cfg_attr(feature = "std", error("invalid format"))]
   InvalidFormat,
+  /// Multiple languages matched during auto-detection.
+  #[cfg_attr(feature = "std", error("multiple languages match"))]
+  MultipleLanguagesMatch,
 }
 
 /// Language options for Polyseed.
@@ -176,6 +180,19 @@ pub enum Language {
   /// Traditional Chinese language option.
   ChineseTraditional,
 }
+
+const ALL_LANGUAGES: [Language; 10] = [
+  Language::English,
+  Language::Spanish,
+  Language::French,
+  Language::Italian,
+  Language::Japanese,
+  Language::Korean,
+  Language::Czech,
+  Language::Portuguese,
+  Language::ChineseSimplified,
+  Language::ChineseTraditional,
+];
 
 struct WordList {
   words: &'static [&'static str],
@@ -459,6 +476,28 @@ impl Polyseed {
       debug_assert_eq!(res.checksum, checksum);
     }
     res
+  }
+
+  /// Create a new `Polyseed` from a String, automatically detecting the language.
+  ///
+  /// Tries all 10 supported languages and returns the seed along with the
+  /// detected language. Returns `MultipleLanguagesMatch` if more than one
+  /// language produces a valid decode.
+  #[allow(clippy::needless_pass_by_value)]
+  pub fn from_string_auto(
+    seed: Zeroizing<String>,
+    coin: Coin,
+  ) -> Result<(Polyseed, Language), PolyseedError> {
+    let mut result: Option<(Polyseed, Language)> = None;
+    for lang in ALL_LANGUAGES {
+      if let Ok(decoded) = Self::from_string(lang, seed.clone(), coin) {
+        if result.is_some() {
+          return Err(PolyseedError::MultipleLanguagesMatch);
+        }
+        result = Some((decoded, lang));
+      }
+    }
+    result.ok_or(PolyseedError::InvalidSeed)
   }
 
   /// When this seed was created, defined in seconds since the epoch.
