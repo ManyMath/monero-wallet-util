@@ -165,24 +165,24 @@ fn test_polyseed() {
 
     // String -> Seed
     println!("{}. language: {:?}, seed: {}", line!(), vector.language, vector.seed.clone());
-    let seed = Polyseed::from_string(vector.language, Zeroizing::new(vector.seed.clone()), Coin::Monero).unwrap();
+    let seed = Polyseed::from_string(vector.language, Zeroizing::new(vector.seed.clone()), Coin::Monero, 0).unwrap();
     let trim = trim_seed(&vector.seed);
     let add_whitespace = add_whitespace(vector.seed.clone());
     let seed_without_accents = seed_without_accents(&vector.seed);
 
     // Make sure a version with added whitespace still works
     let whitespaced_seed =
-      Polyseed::from_string(vector.language, Zeroizing::new(add_whitespace), Coin::Monero).unwrap();
+      Polyseed::from_string(vector.language, Zeroizing::new(add_whitespace), Coin::Monero, 0).unwrap();
     assert_eq!(seed, whitespaced_seed);
     // Check trimmed versions works
     if vector.has_prefix {
-      let trimmed_seed = Polyseed::from_string(vector.language, Zeroizing::new(trim), Coin::Monero).unwrap();
+      let trimmed_seed = Polyseed::from_string(vector.language, Zeroizing::new(trim), Coin::Monero, 0).unwrap();
       assert_eq!(seed, trimmed_seed);
     }
     // Check versions without accents work
     if vector.has_accent {
       let seed_without_accents =
-        Polyseed::from_string(vector.language, Zeroizing::new(seed_without_accents), Coin::Monero).unwrap();
+        Polyseed::from_string(vector.language, Zeroizing::new(seed_without_accents), Coin::Monero, 0).unwrap();
       assert_eq!(seed, seed_without_accents);
     }
 
@@ -198,7 +198,7 @@ fn test_polyseed() {
     {
       let seed = Polyseed::new(&mut OsRng, vector.language);
       println!("{}. seed: {}", line!(), *seed.to_string(Coin::Monero));
-      assert_eq!(seed, Polyseed::from_string(vector.language, seed.to_string(Coin::Monero), Coin::Monero).unwrap());
+      assert_eq!(seed, Polyseed::from_string(vector.language, seed.to_string(Coin::Monero), Coin::Monero, 0).unwrap());
       assert_eq!(
         seed,
         Polyseed::from(vector.language, 0, seed.birthday(), seed.entropy().clone(),).unwrap()
@@ -213,7 +213,7 @@ fn test_invalid_polyseed() {
   let seed = "include domain claim resemble urban hire lunch bird \
     crucial fire best wife ring warm ignore model"
     .into();
-  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed), Coin::Monero);
+  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed), Coin::Monero, 0);
   assert_eq!(res, Err(PolyseedError::UnsupportedFeatures));
 }
 
@@ -222,7 +222,7 @@ fn test_key() {
   let seed: String = "comic blanket chair inject end snow rural improve cereal \
      better initial replace ribbon brother gather unaware"
     .into();
-  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed), Coin::Monero).unwrap();
+  let res = Polyseed::from_string(Language::English, Zeroizing::new(seed), Coin::Monero, 0).unwrap();
   let key = res.key(Coin::Monero);
   assert_eq!(
     *key,
@@ -243,7 +243,7 @@ fn test_is_encrypted() {
 fn test_crypt_roundtrip() {
   let seed_str = "raven tail swear infant grief assist regular lamp \
       duck valid someone little harsh puppy airport language";
-  let original = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let original = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
   let original_entropy = original.entropy().clone();
 
   // Encrypt
@@ -285,13 +285,13 @@ fn test_crypt_salt_and_mask_vector() {
 fn test_store_load_roundtrip() {
   let seed_str = "raven tail swear infant grief assist regular lamp \
       duck valid someone little harsh puppy airport language";
-  let seed = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let seed = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
 
   let storage = seed.store();
   assert_eq!(&storage[.. 8], b"POLYSEED");
   assert_eq!(storage[29], 0xFF);
 
-  let loaded = Polyseed::load(&storage, Language::English).unwrap();
+  let loaded = Polyseed::load(&storage, Language::English, 0).unwrap();
   assert_eq!(seed, loaded);
   assert_eq!(*seed.entropy(), *loaded.entropy());
   assert_eq!(seed.birthday(), loaded.birthday());
@@ -299,7 +299,7 @@ fn test_store_load_roundtrip() {
 
   let random_seed = Polyseed::new(&mut OsRng, Language::Japanese);
   let storage2 = random_seed.store();
-  let loaded2 = Polyseed::load(&storage2, Language::Japanese).unwrap();
+  let loaded2 = Polyseed::load(&storage2, Language::Japanese, 0).unwrap();
   assert_eq!(random_seed, loaded2);
 }
 
@@ -307,31 +307,31 @@ fn test_store_load_roundtrip() {
 fn test_load_invalid_format() {
   let mut storage = [0u8; 32];
   storage[.. 8].copy_from_slice(b"BADHEADR");
-  assert_eq!(Polyseed::load(&storage, Language::English), Err(PolyseedError::InvalidFormat));
+  assert_eq!(Polyseed::load(&storage, Language::English, 0), Err(PolyseedError::InvalidFormat));
 
   let seed = Polyseed::new(&mut OsRng, Language::English);
   let mut storage = *seed.store();
   storage[29] = 0x00;
-  assert_eq!(Polyseed::load(&storage, Language::English), Err(PolyseedError::InvalidFormat));
+  assert_eq!(Polyseed::load(&storage, Language::English, 0), Err(PolyseedError::InvalidFormat));
 
   let mut storage = *seed.store();
   storage[30] = 0x00;
   storage[31] = 0x00;
-  assert_eq!(Polyseed::load(&storage, Language::English), Err(PolyseedError::InvalidFormat));
+  assert_eq!(Polyseed::load(&storage, Language::English, 0), Err(PolyseedError::InvalidFormat));
 }
 
 #[test]
 fn test_crypt_store_load_roundtrip() {
   let seed_str = "raven tail swear infant grief assist regular lamp \
       duck valid someone little harsh puppy airport language";
-  let original = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let original = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
 
   let mut encrypted = original.clone();
   encrypted.crypt("my_password");
   assert!(encrypted.is_encrypted());
 
   let storage = encrypted.store();
-  let mut loaded = Polyseed::load(&storage, Language::English).unwrap();
+  let mut loaded = Polyseed::load(&storage, Language::English, 0).unwrap();
   assert!(loaded.is_encrypted());
   assert_eq!(encrypted, loaded);
 
@@ -344,9 +344,9 @@ fn test_crypt_store_load_roundtrip() {
 fn test_from_string_auto_english() {
   let seed_str = "raven tail swear infant grief assist regular lamp \
       duck valid someone little harsh puppy airport language";
-  let (seed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let (seed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
   assert_eq!(lang, Language::English);
-  let expected = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let expected = Polyseed::from_string(Language::English, Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
   assert_eq!(seed, expected);
 }
 
@@ -354,23 +354,97 @@ fn test_from_string_auto_english() {
 fn test_from_string_auto_japanese() {
   let seed_str = "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
       といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる";
-  let (seed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let (seed, lang) = Polyseed::from_string_auto(Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
   assert_eq!(lang, Language::Japanese);
-  let expected = Polyseed::from_string(Language::Japanese, Zeroizing::new(seed_str.into()), Coin::Monero).unwrap();
+  let expected = Polyseed::from_string(Language::Japanese, Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
   assert_eq!(seed, expected);
 }
 
 #[test]
 fn test_from_string_auto_invalid() {
   let garbage = Zeroizing::new("xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx".into());
-  let result = Polyseed::from_string_auto(garbage, Coin::Monero);
+  let result = Polyseed::from_string_auto(garbage, Coin::Monero, 0);
   assert_eq!(result, Err(PolyseedError::InvalidSeed));
 }
 
 #[test]
 fn test_from_string_auto_wrong_word_count() {
   let too_few = Zeroizing::new("raven tail swear".into());
-  let result = Polyseed::from_string_auto(too_few, Coin::Monero);
+  let result = Polyseed::from_string_auto(too_few, Coin::Monero, 0);
   // All languages fail with InvalidWordCount, which means no match -> InvalidSeed
   assert_eq!(result, Err(PolyseedError::InvalidSeed));
+}
+
+#[test]
+fn test_enable_features() {
+  const FEATURE_FOO: u8 = 1;
+  const FEATURE_BAR: u8 = 2;
+  const FEATURE_QUX: u8 = 4;
+
+  // Without enabling features, creating a seed with user features should fail
+  let mut entropy = Zeroizing::new([0u8; 32]);
+  entropy[0] = 0x42;
+  assert_eq!(
+    Polyseed::from_internal(Language::English, FEATURE_FOO, 0, entropy.clone(), 0),
+    Err(PolyseedError::UnsupportedFeatures)
+  );
+
+  // With features enabled, it should succeed
+  let seed = Polyseed::from_internal(
+    Language::English, FEATURE_FOO, 0, entropy.clone(), FEATURE_FOO | FEATURE_BAR | FEATURE_QUX,
+  ).unwrap();
+  assert_eq!(get_feature(seed.features(), FEATURE_FOO), FEATURE_FOO);
+  assert_eq!(get_feature(seed.features(), FEATURE_BAR), 0);
+  assert_eq!(get_feature(seed.features(), FEATURE_QUX), 0);
+
+  // Create with BAR feature
+  let seed_bar = Polyseed::from_internal(
+    Language::English, FEATURE_BAR, 0, entropy.clone(), FEATURE_FOO | FEATURE_BAR,
+  ).unwrap();
+  assert_eq!(get_feature(seed_bar.features(), FEATURE_BAR), FEATURE_BAR);
+  assert_eq!(get_feature(seed_bar.features(), FEATURE_FOO), 0);
+
+  // Enable only FOO, then BAR should be rejected
+  assert_eq!(
+    Polyseed::from_internal(Language::English, FEATURE_BAR, 0, entropy.clone(), FEATURE_FOO),
+    Err(PolyseedError::UnsupportedFeatures)
+  );
+
+  // Decode a seed with features using enabled_features parameter
+  let seed_with_feat = Polyseed::from(Language::English, FEATURE_FOO, 1635768000, entropy.clone()).unwrap();
+  let phrase = seed_with_feat.to_string(Coin::Monero);
+
+  // Without enabling, decode should fail with UnsupportedFeatures
+  let res = Polyseed::from_string(Language::English, phrase.clone(), Coin::Monero, 0);
+  assert_eq!(res, Err(PolyseedError::UnsupportedFeatures));
+
+  // With enabling, decode should succeed
+  let decoded = Polyseed::from_string(Language::English, phrase, Coin::Monero, FEATURE_FOO).unwrap();
+  assert_eq!(decoded, seed_with_feat);
+
+  // Store/load with features
+  let storage = seed_with_feat.store();
+  let loaded = Polyseed::load(&storage, Language::English, FEATURE_FOO).unwrap();
+  assert_eq!(loaded, seed_with_feat);
+
+  // Load without enabling should fail
+  let res = Polyseed::load(&storage, Language::English, 0);
+  assert_eq!(res, Err(PolyseedError::UnsupportedFeatures));
+}
+
+#[test]
+fn test_nfc_output_japanese() {
+  // Japanese should use ideographic space separator
+  let seed_str = "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
+      といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる";
+  let seed = Polyseed::from_string(Language::Japanese, Zeroizing::new(seed_str.into()), Coin::Monero, 0).unwrap();
+  let output = seed.to_string(Coin::Monero);
+
+  // Count ideographic spaces (U+3000)
+  let ideographic_spaces = output.chars().filter(|&c| c == '\u{3000}').count();
+  assert_eq!(ideographic_spaces, 15, "Japanese output should have 15 ideographic space separators");
+
+  // Should not contain ASCII spaces
+  let ascii_spaces = output.chars().filter(|&c| c == ' ').count();
+  assert_eq!(ascii_spaces, 0, "Japanese output should not contain ASCII spaces");
 }
