@@ -32,6 +32,8 @@ unicode-normalization = { version = "0.1", default-features = false }
 [dev-dependencies]
 hex = { version = "0.4", default-features = false, features = ["std"] }
 unicode-normalization = "0.1"
+sha2 = "0.10"
+pbkdf2 = { version = "0.12", features = ["simple"] }
 
 [features]
 std = [
