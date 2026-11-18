@@ -722,6 +722,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-payment-proofs"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "monero-base58",
+ "monero-wallet",
+ "rand_core",
+ "sha3",
+ "std-shims",
+ "zeroize",
+]
+
+[[package]]
 name = "monero-primitives"
 version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide#a941dfff1a5333b6349d9a1ee5de49c158b0e3d2"
